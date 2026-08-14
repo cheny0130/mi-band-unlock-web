@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小米手环解锁码工具</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: system-ui, sans-serif;
+        }
+        body {
+            background-color: #000000;
+            color: #ffffff;
+            padding: 30px 20px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .title {
+            font-size: 26px;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .top-row {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        button {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        .btn-algo {
+            background: #cccccc;
+            color: #000;
+        }
+        .label-text {
+            font-size: 18px;
+            margin-top: 16px;
+            display: block;
+        }
+        input {
+            width: 100%;
+            height: 56px;
+            margin: 10px 0;
+            background: #222222;
+            color: #fff;
+            border: none;
+            padding: 0 14px;
+            font-size: 17px;
+            border-radius: 4px;
+        }
+        input::placeholder {
+            color: #aaaaaa;
+        }
+        #btn-gen {
+            width: 100%;
+            height: 58px;
+            background: #2577E8;
+            color: white;
+            font-size: 19px;
+            margin-top: 20px;
+        }
+        #btn-clear {
+            width: 100%;
+            height: 58px;
+            background: #E84335;
+            color: white;
+            font-size: 19px;
+            margin-top: 12px;
+        }
+        /* 强制亮蓝色，绝对不会和黑色背景融合看不见 */
+        #result-text {
+            margin-top: 40px;
+            text-align: center;
+            font-size: 24px;
+            color: #60D0FF !important;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="top-row">
+        <button id="switchAlgoBtn" class="btn-algo">当前：老算法</button>
+    </div>
+
+    <h1 class="title">小米手环解锁</h1>
+
+    <label class="label-text">MAC地址</label>
+    <input id="macInput" placeholder="例如：00:11:22:33:44:55">
+
+    <label class="label-text">SN序列号</label>
+    <input id="snInput" placeholder="输入机身SN码">
+
+    <button id="btn-gen">生成解锁码</button>
+    <button id="btn-clear">一键清空</button>
+
+    <div id="result-text"></div>
+
+    <script>
+        // 原生浏览器SHA256，不需要联网，离线可用
+        async function sha256(str) {
+            const encoder = new TextEncoder();
+            const data = encoder.encode(str);
+            const hashBuf = await crypto.subtle.digest("SHA-256", data);
+            const arr = Array.from(new Uint8Array(hashBuf));
+            return arr.map(b => b.toString(16).padStart(2, "0")).join("");
+        }
+
+        let useNewAlgo = false;
+        const switchAlgoBtn = document.getElementById('switchAlgoBtn');
+        const macInput = document.getElementById('macInput');
+        const snInput = document.getElementById('snInput');
+        const btnGen = document.getElementById('btn-gen');
+        const btnClear = document.getElementById('btn-clear');
+        const resultText = document.getElementById('result-text');
+
+        // 切换算法按钮
+        switchAlgoBtn.onclick = () => {
+            useNewAlgo = !useNewAlgo;
+            switchAlgoBtn.innerText = useNewAlgo ? "当前：新算法" : "当前：老算法";
+            resultText.innerText = "";
+        };
+
+        // MAC格式化
+        function normalizeMac(mac) {
+            return mac.toUpperCase()
+                .replace(/：/g, "")
+                .replace(/:/g, "")
+                .replace(/-/g, "")
+                .replace(/ /g, "")
+                .replace(/\./g, "");
+        }
+
+        // SN格式化
+        function normalizeSn(sn) {
+            return sn.trim().toUpperCase();
+        }
+
+        // 生成解锁码
+        async function generateUnlockCode(macRaw, snRaw, newAlgo) {
+            const mac = normalizeMac(macRaw);
+            const sn = normalizeSn(snRaw);
+            let hashStr;
+            if (newAlgo) {
+                hashStr = await sha256(sn + mac + "XIAOMI");
+            } else {
+                hashStr = await sha256(mac + sn + "XIAOMI");
+            }
+            // 转字节数组取前10位数字
+            const hashBytes = [];
+            for(let i = 0; i < hashStr.length; i += 2) {
+                hashBytes.push(parseInt(hashStr.substring(i, i+2), 16));
+            }
+            let code = "";
+            for(let i = 0; i < 10; i++) {
+                code += hashBytes[i] % 10;
+            }
+            return code;
+        }
+
+        // 生成按钮点击
+        btnGen.onclick = async () => {
+            const macVal = macInput.value;
+            const snVal = snInput.value;
+            if(!macVal || !snVal){
+                resultText.innerText = "请填写MAC和SN";
+                return;
+            }
+            const code = await generateUnlockCode(macVal, snVal, useNewAlgo);
+            resultText.innerText = "解锁码：" + code;
+        };
+
+        // 一键清空
+        btnClear.onclick = () => {
+            macInput.value = "";
+            snInput.value = "";
+            resultText.innerText = "";
+        };
+
+        // 点击复制解锁码
+        resultText.onclick = async () => {
+            const text = resultText.innerText;
+            if(text.startsWith("解锁码：")) {
+                const code = text.substring(4);
+                await navigator.clipboard.writeText(code);
+                alert("解锁码已复制！");
+            }
+        };
+    </script>
+</body>
+</html>
